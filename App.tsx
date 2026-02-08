@@ -48,7 +48,10 @@ const App: React.FC = () => {
   });
 
   const [generatedBatches, setGeneratedBatches] = useState<IdeaBatch[]>([]);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(true);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.matchMedia('(min-width: 1024px)').matches;
+  });
   const toggleDrawer = () => setIsDrawerOpen(prev => !prev);
   const { address, isConnected: isWalletConnected } = useAccount();
 
@@ -321,12 +324,15 @@ const App: React.FC = () => {
       {/* Navbar */}
       <nav className="border-b border-white/5 bg-black/50 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-[#FCEE09] p-1 rounded">
-              <Terminal className="w-4 h-4 text-black" />
+          <div className="flex items-center gap-3">
+            <div className="bg-[#FCEE09]/10 p-1.5 rounded border border-[#FCEE09]/30">
+              <img src="/logo.png" alt="4craft logo" className="w-5 h-5 object-contain" />
             </div>
             <span className="font-bold tracking-wider text-white">{t.navbar.title}</span>
             <span className="text-[10px] font-mono text-gray-500 border border-white/10 px-1 rounded">{t.navbar.subtitle}</span>
+            <button className="text-[10px] font-mono px-2 py-1 rounded border border-[#FFB800]/40 text-[#FFB800] bg-[#FFB800]/10 hover:border-[#FFB800] hover:text-black hover:bg-[#FFB800] transition">
+              I'm agent
+            </button>
           </div>
           <div className="flex items-center gap-6 text-xs font-mono text-gray-400">
             <div className="relative">
