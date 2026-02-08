@@ -330,9 +330,12 @@ const App: React.FC = () => {
             </div>
             <span className="font-bold tracking-wider text-white">{t.navbar.title}</span>
             <span className="text-[10px] font-mono text-gray-500 border border-white/10 px-1 rounded">{t.navbar.subtitle}</span>
-            <button className="text-[10px] font-mono px-2 py-1 rounded border border-[#FFB800]/40 text-[#FFB800] bg-[#FFB800]/10 hover:border-[#FFB800] hover:text-black hover:bg-[#FFB800] transition">
+            <a
+              href="/skill.md"
+              className="text-[10px] font-mono px-2 py-1 rounded border border-[#FFB800]/40 text-[#FFB800] bg-[#FFB800]/10 hover:border-[#FFB800] hover:text-black hover:bg-[#FFB800] transition"
+            >
               I'm agent
-            </button>
+            </a>
           </div>
           <div className="flex items-center gap-6 text-xs font-mono text-gray-400">
             <div className="relative">
