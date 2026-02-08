@@ -66,7 +66,7 @@ const App: React.FC = () => {
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const defaultAiSettings: AISettings = {
-    baseUrl: process.env.OPENAI_BASE_URL || '',
+    baseUrl: process.env.OPENAI_DEFAULT_BASE_URL || process.env.OPENAI_BASE_URL || '',
     model: process.env.OPENAI_MODEL || ''
   };
   const [aiSettings, setAiSettings] = useState<AISettings>(() => ({ ...defaultAiSettings }));
