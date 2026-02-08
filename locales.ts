@@ -74,6 +74,8 @@ const baseTranslations = {
     open_v0: 'V0.APP',
     mint_token: 'MINT TOKEN',
     min_chaos: 'MIN CHAOS',
+    reset_cache: 'RESET CACHE',
+    generate_prompt: 'GENERATE PROMPT',
     deploy_title: 'TOKEN LAUNCH FORM (FOUR.MEME)',
     token_name: 'TOKEN NAME',
     token_symbol: 'SYMBOL',

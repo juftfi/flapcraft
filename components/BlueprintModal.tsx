@@ -2,6 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Idea, Blueprint, AISettings } from '../types';
 import { generateContractCode, generateFrontendPrompt } from '../services/ai';
 import { X, Code, Terminal, UploadCloud, Cpu, FileText, CheckCircle2, Copy, Download, ExternalLink, ArrowLeft, Rocket } from 'lucide-react';
+import { useConnectorClient, usePublicClient, useChainId, useAccount } from 'wagmi';
+import { createWalletClient, custom } from 'viem';
+import { bsc } from 'wagmi/chains';
 import { PDFDocument, StandardFonts, rgb, PDFFont } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 
@@ -92,6 +95,97 @@ const wrapTextLines = (text: string, font: PDFFont, size: number, maxWidth: numb
 
     flushCurrent();
     return results;
+};
+
+declare global {
+    interface Window {
+        solc?: {
+            compile: (input: string) => string;
+        };
+    }
+}
+
+const loadSolc = () => {
+    if (typeof window === 'undefined') return Promise.reject(new Error('No window environment.'));
+    if (window.solc) return Promise.resolve(window.solc);
+    const sources = [
+        'https://cdn.jsdelivr.net/npm/solc@0.8.23/solc.min.js',
+        'https://unpkg.com/solc@0.8.23/solc.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/solc/0.8.23/solc.min.js',
+    ];
+    const tryLoad = (src: string) => new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error(`solc script failed to load: ${src}`));
+        document.head.appendChild(script);
+    });
+    return new Promise<typeof window.solc>((resolve, reject) => {
+        const run = async () => {
+            for (const src of sources) {
+                try {
+                    await tryLoad(src);
+                    if (window.solc) {
+                        resolve(window.solc);
+                        return;
+                    }
+                } catch {
+                    // try next source
+                }
+            }
+            reject(new Error('solc failed to load.'));
+        };
+        run();
+    });
+};
+
+const stripCodeFence = (source: string) => {
+    const trimmed = source.trim();
+    const fenceMatch = trimmed.match(/```(?:solidity)?\s*([\s\S]*?)```/i);
+    if (fenceMatch?.[1]) return fenceMatch[1].trim();
+    return source;
+};
+
+const compileSolidity = async (source: string) => {
+    const solc = await loadSolc();
+    const normalizedSource = stripCodeFence(source);
+    const input = {
+        language: 'Solidity',
+        sources: {
+            'Contract.sol': {
+                content: normalizedSource,
+            },
+        },
+        settings: {
+            outputSelection: {
+                '*': {
+                    '*': ['abi', 'evm.bytecode'],
+                },
+            },
+        },
+    };
+
+    const output = JSON.parse(solc.compile(JSON.stringify(input)));
+    const errors = output?.errors || [];
+    const hardErrors = errors.filter((err: any) => err.severity === 'error');
+    if (hardErrors.length > 0) {
+        const message = hardErrors.map((err: any) => err.formattedMessage || err.message).join('\n');
+        throw new Error(message);
+    }
+
+    const contracts = output?.contracts?.['Contract.sol'];
+    const contractName = contracts ? Object.keys(contracts)[0] : undefined;
+    if (!contractName) {
+        throw new Error('No contract compiled from source.');
+    }
+    const artifact = contracts[contractName];
+    const abi = artifact?.abi;
+    const bytecode = artifact?.evm?.bytecode?.object;
+    if (!abi || !bytecode) {
+        throw new Error('Missing ABI or bytecode from compilation.');
+    }
+    return { abi, bytecode: `0x${bytecode}`, contractName };
 };
 
 const createPdfBlob = async (text: string) => {
@@ -205,20 +299,47 @@ const buildLogoSet = (ideaTitle: string) => {
 
 const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClose, t, aiConfig }) => {
     const [activeTab, setActiveTab] = useState<'DOCS' | 'BUILDER'>('DOCS');
-    const [buildStep, setBuildStep] = useState<number>(0); // 0: Idle, 1: Contract, 2: Frontend, 3: Deploy
-    const [contractCode, setContractCode] = useState<string>('');
-    const [frontendPrompt, setFrontendPrompt] = useState<string>('');
-    const [buildLogs, setBuildLogs] = useState<string[]>([]);
-    const [isContractDeploying, setIsContractDeploying] = useState(false);
-    const [contractAddress, setContractAddress] = useState<string | null>(null);
-    const [logos, setLogos] = useState<string[]>([]);
-    const [selectedLogo, setSelectedLogo] = useState<number>(0);
+    const { data: walletClient } = useConnectorClient();
+    const { isConnected } = useAccount();
+    const publicClient = usePublicClient();
+    const chainId = useChainId();
+    const buildLogsKey = `fourcraft_builder_logs_${idea.id}`;
+    const builderStateKey = `fourcraft_builder_state_${idea.id}`;
+    const getStoredBuilderState = () => {
+        if (typeof window === 'undefined') return null;
+        const stored = window.localStorage.getItem(builderStateKey);
+        if (!stored) return null;
+        try {
+            return JSON.parse(stored);
+        } catch {
+            return null;
+        }
+    };
+    const storedBuilder = getStoredBuilderState();
+    const [buildStep, setBuildStep] = useState<number>(typeof storedBuilder?.buildStep === 'number' ? storedBuilder.buildStep : 0); // 0: Idle, 1: Contract, 2: Frontend, 3: Deploy
+    const [contractCode, setContractCode] = useState<string>(typeof storedBuilder?.contractCode === 'string' ? storedBuilder.contractCode : '');
+    const [frontendPrompt, setFrontendPrompt] = useState<string>(typeof storedBuilder?.frontendPrompt === 'string' ? storedBuilder.frontendPrompt : '');
+    const [contractAddress, setContractAddress] = useState<string | null>(typeof storedBuilder?.contractAddress === 'string' ? storedBuilder.contractAddress : null);
+    const [logos, setLogos] = useState<string[]>(Array.isArray(storedBuilder?.logos) ? storedBuilder.logos : []);
+    const [selectedLogo, setSelectedLogo] = useState<number>(typeof storedBuilder?.selectedLogo === 'number' ? storedBuilder.selectedLogo : 0);
     const [tokenForm, setTokenForm] = useState({
-        name: '',
-        symbol: '',
-        supply: '1000000000',
-        description: '',
+        name: storedBuilder?.tokenForm?.name || '',
+        symbol: storedBuilder?.tokenForm?.symbol || '',
+        supply: storedBuilder?.tokenForm?.supply || '1000000000',
+        description: storedBuilder?.tokenForm?.description || '',
     });
+    const [buildLogs, setBuildLogs] = useState<string[]>(() => {
+        if (typeof window === 'undefined') return [];
+        const stored = window.localStorage.getItem(buildLogsKey);
+        if (!stored) return [];
+        try {
+            const parsed = JSON.parse(stored);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    });
+    const [isContractDeploying, setIsContractDeploying] = useState(false);
     const [isMinting, setIsMinting] = useState(false);
     const blueprintMarkdown = useMemo(() => blueprint ? blueprintToMarkdown(idea, blueprint) : '', [blueprint, idea]);
     const previewTitle = buildStep === 2 ? t.frontend_prompt : buildStep === 3 ? t.deploy_title : t.gen_assets;
@@ -232,7 +353,87 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
 
     const addToLog = (msg: string) => setBuildLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
+    useEffect(() => {
+        const stored = getStoredBuilderState();
+        if (stored) {
+            setBuildStep(typeof stored?.buildStep === 'number' ? stored.buildStep : 0);
+            setContractCode(typeof stored?.contractCode === 'string' ? stored.contractCode : '');
+            setFrontendPrompt(typeof stored?.frontendPrompt === 'string' ? stored.frontendPrompt : '');
+            setContractAddress(typeof stored?.contractAddress === 'string' ? stored.contractAddress : null);
+            setLogos(Array.isArray(stored?.logos) ? stored.logos : []);
+            setSelectedLogo(typeof stored?.selectedLogo === 'number' ? stored.selectedLogo : 0);
+            setTokenForm({
+                name: stored?.tokenForm?.name || '',
+                symbol: stored?.tokenForm?.symbol || '',
+                supply: stored?.tokenForm?.supply || '1000000000',
+                description: stored?.tokenForm?.description || '',
+            });
+        } else {
+            setBuildStep(0);
+            setContractCode('');
+            setFrontendPrompt('');
+            setContractAddress(null);
+            setLogos([]);
+            setSelectedLogo(0);
+            setTokenForm({
+                name: '',
+                symbol: '',
+                supply: '1000000000',
+                description: '',
+            });
+        }
+
+        if (typeof window !== 'undefined') {
+            const storedLogs = window.localStorage.getItem(buildLogsKey);
+            if (storedLogs) {
+                try {
+                    const parsed = JSON.parse(storedLogs);
+                    setBuildLogs(Array.isArray(parsed) ? parsed : []);
+                } catch {
+                    setBuildLogs([]);
+                }
+            } else {
+                setBuildLogs([]);
+            }
+        }
+    }, [builderStateKey, buildLogsKey]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.setItem(buildLogsKey, JSON.stringify(buildLogs));
+    }, [buildLogs, buildLogsKey]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const payload = {
+            buildStep,
+            contractCode,
+            frontendPrompt,
+            contractAddress,
+            logos,
+            selectedLogo,
+            tokenForm,
+        };
+        window.localStorage.setItem(builderStateKey, JSON.stringify(payload));
+    }, [
+        buildStep,
+        contractCode,
+        frontendPrompt,
+        contractAddress,
+        logos,
+        selectedLogo,
+        tokenForm,
+        builderStateKey,
+    ]);
+
     const handleStartBuild = async () => {
+        const hasCache = Boolean(contractCode || frontendPrompt || contractAddress || logos.length || buildLogs.length);
+        if (hasCache) {
+            setBuildStep(prev => (prev > 0 ? prev : 1));
+            addToLog("Loaded cached builder state.");
+            return;
+        }
+
         setBuildStep(1);
         setContractCode('');
         setFrontendPrompt('');
@@ -258,14 +459,65 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
 
     const handleContractDeploy = () => {
         if (!contractCode || isContractDeploying) return;
-        setIsContractDeploying(true);
-        addToLog("Deploying contract to BSC...");
-        setTimeout(() => {
-            const address = `0x${idea.id.replace(/-/g, '').slice(0, 40)}`;
-            setContractAddress(address);
-            setIsContractDeploying(false);
-            addToLog(`Contract deployed at ${address}`);
-        }, 1600);
+        if (!isConnected) {
+            addToLog("Wallet not connected. Please connect to deploy.");
+            return;
+        }
+        if (!publicClient) {
+            addToLog("Public client unavailable.");
+            return;
+        }
+        if (chainId !== bsc.id) {
+            addToLog("Wrong network. Please switch to BSC.");
+            return;
+        }
+        const run = async () => {
+            setIsContractDeploying(true);
+            try {
+                let activeWalletClient = walletClient;
+                if (!activeWalletClient && typeof window !== 'undefined' && (window as any).ethereum) {
+                    activeWalletClient = createWalletClient({
+                        chain: bsc,
+                        transport: custom((window as any).ethereum),
+                    });
+                }
+                if (!activeWalletClient) {
+                    addToLog("Wallet client unavailable. Please reconnect your wallet.");
+                    setIsContractDeploying(false);
+                    return;
+                }
+
+                addToLog("Compiling Solidity contract...");
+                const { abi, bytecode, contractName } = await compileSolidity(contractCode);
+                const ctor = Array.isArray(abi) ? abi.find((item: any) => item.type === 'constructor') : undefined;
+                if (ctor?.inputs?.length) {
+                    addToLog("Constructor args detected. Deployment requires manual args (not supported in UI).");
+                    setIsContractDeploying(false);
+                    return;
+                }
+                addToLog("Deploying contract to BSC...");
+                const hash = await activeWalletClient.deployContract({
+                    abi,
+                    bytecode,
+                    args: [],
+                });
+                addToLog(`Deploy tx sent: ${hash}`);
+                const receipt = await publicClient.waitForTransactionReceipt({ hash });
+                const deployed = receipt.contractAddress;
+                if (deployed) {
+                    setContractAddress(deployed);
+                    addToLog(`Contract deployed at ${deployed}`);
+                } else {
+                    addToLog(`Deployment confirmed. Address unavailable for ${contractName}.`);
+                }
+            } catch (error: any) {
+                addToLog(`Deploy failed: ${error?.message || 'Unknown error'}`);
+            } finally {
+                setIsContractDeploying(false);
+            }
+        };
+
+        run();
     };
 
     const handleCopy = async (payload: string) => {
@@ -277,11 +529,21 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
         }
     };
 
+    const handleGenerateFrontendPrompt = async () => {
+        addToLog("Agent: Writing Dapp build prompt...");
+        try {
+            const prompt = await generateFrontendPrompt(idea, contractCode, aiConfig);
+            setFrontendPrompt(prompt);
+            addToLog("Frontend prompt ready. Paste it into your vibe coding IDE.");
+        } catch {
+            addToLog("Failed to generate frontend prompt.");
+        }
+    };
+
     useEffect(() => {
         if (buildStep !== 2 || frontendPrompt) return;
         let active = true;
         const run = async () => {
-            addToLog("Agent: Writing Dapp build prompt...");
             try {
                 const prompt = await generateFrontendPrompt(idea, contractCode, aiConfig);
                 if (!active) return;
@@ -322,6 +584,28 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
         }, 2000);
     };
 
+    const handleResetCache = () => {
+        if (typeof window !== 'undefined') {
+            window.localStorage.removeItem(buildLogsKey);
+            window.localStorage.removeItem(builderStateKey);
+        }
+        setBuildStep(0);
+        setContractCode('');
+        setFrontendPrompt('');
+        setContractAddress(null);
+        setLogos([]);
+        setSelectedLogo(0);
+        setTokenForm({
+            name: '',
+            symbol: '',
+            supply: '1000000000',
+            description: '',
+        });
+        setBuildLogs([]);
+        setIsContractDeploying(false);
+        setIsMinting(false);
+    };
+
     const downloadFile = (filename: string, data: Blob | string, mime: string) => {
         const blob = data instanceof Blob ? data : new Blob([data], { type: mime });
         const link = document.createElement('a');
@@ -355,7 +639,15 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                             {idea.title}
                             <span className="text-xs font-mono px-2 py-0.5 rounded bg-[#FCEE09]/10 text-[#FCEE09]">{t.blueprint_mode}</span>
                         </h2>
-                        <p className="text-xs text-gray-500 font-mono mt-1">{idea.id}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                            <p className="text-xs text-gray-500 font-mono">{idea.id}</p>
+                            <button
+                                onClick={handleResetCache}
+                                className="text-[10px] font-mono px-2 py-0.5 rounded border border-white/10 text-gray-400 hover:border-white/40 hover:text-white transition"
+                            >
+                                {t.reset_cache}
+                            </button>
+                        </div>
                     </div>
                     <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
                         <X className="w-6 h-6" />
@@ -580,22 +872,27 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                             </div>
 
                             {buildStep === 0 && (
-                                <button
-                                    onClick={handleStartBuild}
-                                    className="w-full py-4 bg-[#FFB800] text-black font-bold font-mono rounded hover:bg-[#E69A00] transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,184,0,0.25)]"
-                                >
-                                    <Cpu className="w-4 h-4" /> {t.init_builder}
-                                </button>
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <button
+                                        onClick={handleStartBuild}
+                                        className="flex-1 py-4 bg-[#FFB800] text-black font-bold font-mono rounded hover:bg-[#E69A00] transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,184,0,0.25)]"
+                                    >
+                                        <Cpu className="w-4 h-4" /> {t.init_builder}
+                                    </button>
+                                </div>
                             )}
 
                             {buildStep === 1 && (
                                 <div className="flex flex-col sm:flex-row gap-3">
                                     <button
                                         onClick={handleContractDeploy}
-                                        disabled={!contractCode || isContractDeploying}
-                                        className="flex-1 py-3 bg-white/10 text-white font-mono rounded border border-white/10 hover:border-white/40 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        disabled
+                                        className="flex-1 py-3 bg-white/5 text-gray-500 font-mono rounded border border-white/10 cursor-not-allowed flex items-center justify-center gap-3"
                                     >
                                         <UploadCloud className="w-4 h-4" /> {t.contract_deploy}
+                                        <span className="text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full border border-[#FFB800]/40 text-[#FFB800] bg-[#FFB800]/10">
+                                            Coming Soon
+                                        </span>
                                     </button>
                                     <button
                                         onClick={() => setBuildStep(2)}
@@ -616,6 +913,13 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                                         <ArrowLeft className="w-4 h-4" /> {t.prev_step}
                                     </button>
                                     <button
+                                        onClick={handleGenerateFrontendPrompt}
+                                        disabled={!contractCode}
+                                        className="sm:w-56 py-3 bg-white/10 text-white font-mono rounded border border-white/10 hover:border-white/40 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        <Terminal className="w-4 h-4" /> {t.generate_prompt}
+                                    </button>
+                                    <button
                                         onClick={() => setBuildStep(3)}
                                         disabled={!frontendPrompt}
                                         className="flex-1 py-3 bg-[#FFB800] text-black font-bold font-mono rounded hover:bg-[#E69A00] transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -626,13 +930,21 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                             )}
 
                             {buildStep === 3 && (
-                                <button
-                                    onClick={handleMintChaos}
-                                    disabled={isMinting}
-                                    className="w-full py-4 bg-gradient-to-r from-[#FFB800] to-[#FF9A00] text-white font-bold font-mono rounded hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
-                                >
-                                    <Rocket className="w-4 h-4" /> {t.min_chaos}
-                                </button>
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <button
+                                        onClick={() => setBuildStep(2)}
+                                        className="flex-1 py-4 bg-white/5 text-gray-300 font-mono rounded border border-white/10 hover:border-white/40 flex items-center justify-center gap-2"
+                                    >
+                                        <ArrowLeft className="w-4 h-4" /> {t.prev_step}
+                                    </button>
+                                    <button
+                                        onClick={handleMintChaos}
+                                        disabled={isMinting}
+                                        className="flex-1 py-4 bg-gradient-to-r from-[#FFB800] to-[#FF9A00] text-black font-bold font-mono rounded hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                                    >
+                                        <Rocket className="w-4 h-4" /> {t.min_chaos}
+                                    </button>
+                                </div>
                             )}
                         </div>
                     )}
