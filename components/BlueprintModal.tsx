@@ -512,7 +512,7 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
         website: storedBuilder?.tokenForm?.website || 'https://www.com',
         customLogoData: storedBuilder?.tokenForm?.customLogoData || '',
         useCustomLogo: storedBuilder?.tokenForm?.useCustomLogo ?? false,
-        dryRun: storedBuilder?.tokenForm?.dryRun ?? true,
+        dryRun: storedBuilder?.tokenForm?.dryRun ?? false,
         taxRatePercent: storedBuilder?.tokenForm?.taxRatePercent ?? 3,
         fundsPercent: storedBuilder?.tokenForm?.fundsPercent ?? 100,
         burnPercent: storedBuilder?.tokenForm?.burnPercent ?? 0,
@@ -569,7 +569,7 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                 website: stored?.tokenForm?.website || 'https://www.com',
                 customLogoData: stored?.tokenForm?.customLogoData || '',
                 useCustomLogo: stored?.tokenForm?.useCustomLogo ?? false,
-                dryRun: stored?.tokenForm?.dryRun ?? true,
+                dryRun: stored?.tokenForm?.dryRun ?? false,
                 taxRatePercent: stored?.tokenForm?.taxRatePercent ?? 3,
                 fundsPercent: stored?.tokenForm?.fundsPercent ?? 100,
                 burnPercent: stored?.tokenForm?.burnPercent ?? 0,
@@ -594,7 +594,7 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                 website: 'https://www.com',
                 customLogoData: '',
                 useCustomLogo: false,
-                dryRun: true,
+                dryRun: false,
                 taxRatePercent: 3,
                 fundsPercent: 100,
                 burnPercent: 0,
@@ -797,7 +797,7 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
             website: prev.website || 'https://www.com',
             customLogoData: prev.customLogoData || '',
             useCustomLogo: prev.useCustomLogo ?? false,
-            dryRun: prev.dryRun ?? true,
+            dryRun: prev.dryRun ?? false,
             taxRatePercent: prev.taxRatePercent ?? 3,
             fundsPercent: prev.fundsPercent ?? 100,
             burnPercent: prev.burnPercent ?? 0,
@@ -1029,24 +1029,24 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
         setContractAddress(null);
         setLogos([]);
         setSelectedLogo(0);
-            setTokenForm({
-                name: '',
-                symbol: '',
-                supply: '1000000000',
-                description: '',
-                twitter: '',
-                telegram: '',
-                website: '',
-                customLogoData: '',
-                useCustomLogo: false,
-                dryRun: true,
-                taxRatePercent: 3,
-                fundsPercent: 100,
-                burnPercent: 0,
-                holdersPercent: 0,
-                liquidityPercent: 0,
-                beneficiaryAddress: address || '',
-            });
+        setTokenForm({
+            name: '',
+            symbol: '',
+            supply: '1000000000',
+            description: '',
+            twitter: '',
+            telegram: '',
+            website: '',
+            customLogoData: '',
+            useCustomLogo: false,
+            dryRun: false,
+            taxRatePercent: 3,
+            fundsPercent: 100,
+            burnPercent: 0,
+            holdersPercent: 0,
+            liquidityPercent: 0,
+            beneficiaryAddress: address || '',
+        });
         setBuildLogs([]);
         setIsContractDeploying(false);
         setIsMinting(false);
@@ -1439,14 +1439,6 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                                                 </div>
                                                 <div className="space-y-3">
                                                     <div className="text-gray-500">{t.launch_config}</div>
-                                                    <label className="flex items-center gap-2 text-gray-400">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={Boolean(tokenForm.dryRun)}
-                                                            onChange={(e) => setTokenForm(prev => ({ ...prev, dryRun: e.target.checked }))}
-                                                        />
-                                                        <span className="text-gray-500">{t.launch_dryrun}</span>
-                                                    </label>
                                                 </div>
                                             </div>
                                         )}
