@@ -4,6 +4,21 @@ import { generateContractCode, generateFrontendPrompt } from '../services/ai';
 import { X, Code, Terminal, UploadCloud, Cpu, FileText, CheckCircle2, Copy, Download, ExternalLink, ArrowLeft, Rocket } from 'lucide-react';
 import { useConnectorClient, usePublicClient, useChainId, useAccount } from 'wagmi';
 import { createWalletClient, custom } from 'viem';
+
+const FOUR_MEME_API = (import.meta as any).env?.VITE_FOUR_MEME_RELAY || 'http://localhost:8788/relay';
+const FOUR_MEME_FACTORY = '0x5c952063c7fc8610FFDB798152D69F0B9550762b';
+const FOUR_MEME_FACTORY_ABI = [
+    {
+        inputs: [
+            { internalType: 'bytes', name: 'args', type: 'bytes' },
+            { internalType: 'bytes', name: 'signature', type: 'bytes' },
+        ],
+        name: 'createToken',
+        outputs: [{ internalType: 'address', name: '', type: 'address' }],
+        stateMutability: 'payable',
+        type: 'function',
+    },
+] as const;
 import { bsc } from 'wagmi/chains';
 import { PDFDocument, StandardFonts, rgb, PDFFont } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
@@ -293,14 +308,179 @@ const buildLogoSet = (ideaTitle: string) => {
     const base = hashString(ideaTitle);
     return Array.from({ length: 4 }).map((_, idx) => {
         const svg = buildLogoSvg(base + idx * 17);
-        return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+        const encoded = typeof window !== 'undefined'
+            ? btoa(unescape(encodeURIComponent(svg)))
+            : '';
+        return `data:image/svg+xml;base64,${encoded}`;
     });
+};
+
+const ensureWalletAuthorized = async (client: any) => {
+    if (client?.requestAddresses) {
+        return client.requestAddresses();
+    }
+    if (typeof window !== 'undefined' && (window as any).ethereum?.request) {
+        return (window as any).ethereum.request({ method: 'eth_requestAccounts' });
+    }
+    return [];
+};
+
+const signMessageCompat = async (client: any, message: string, account: string) => {
+    if (client?.signMessage) {
+        return client.signMessage({ message, account });
+    }
+    if (typeof window !== 'undefined' && (window as any).ethereum?.request) {
+        return (window as any).ethereum.request({
+            method: 'personal_sign',
+            params: [message, account],
+        });
+    }
+    throw new Error('No signer available for message signing.');
+};
+
+const writeContractCompat = async (
+    client: any,
+    account: string,
+    args: { address: `0x${string}`; abi: any; functionName: string; args: any[] }
+) => {
+    if (client?.writeContract) {
+        return client.writeContract({ ...args, account });
+    }
+    if (typeof window !== 'undefined' && (window as any).ethereum?.request) {
+        const data = await (client ? client.encodeFunctionData?.(args) : null)
+            ?? (await import('viem')).encodeFunctionData(args);
+        return (window as any).ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [
+                {
+                    from: account,
+                    to: args.address,
+                    data,
+                },
+            ],
+        });
+    }
+    throw new Error('No signer available for contract write.');
+};
+
+const dataUrlToBlob = (dataUrl: string) => {
+    const base64Match = /^data:(image\/(png|jpeg|jpg|svg\+xml));base64,(.+)$/.exec(dataUrl);
+    if (base64Match) {
+        const mime = base64Match[1];
+        const data = base64Match[3];
+        const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+        return new Blob([bytes], { type: mime });
+    }
+
+    const utf8Match = /^data:(image\/svg\+xml);utf8,(.+)$/.exec(dataUrl);
+    if (utf8Match) {
+        const mime = utf8Match[1];
+        const decoded = decodeURIComponent(utf8Match[2]);
+        return new Blob([decoded], { type: mime });
+    }
+
+    return null;
+};
+
+const svgToPngBlob = (svgBlob: Blob, size = 512): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(svgBlob);
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                URL.revokeObjectURL(url);
+                reject(new Error('Canvas unavailable.'));
+                return;
+            }
+            ctx.clearRect(0, 0, size, size);
+            ctx.drawImage(img, 0, 0, size, size);
+            canvas.toBlob((blob) => {
+                URL.revokeObjectURL(url);
+                if (!blob) {
+                    reject(new Error('Failed to convert logo to PNG.'));
+                    return;
+                }
+                resolve(blob);
+            }, 'image/png');
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('Failed to load logo image.'));
+        };
+        img.src = url;
+    });
+};
+
+const buildMetadataPayload = (token: any, imageUrl: string, tax: any | null) => {
+    const isTaxToken = (tax?.taxRateBps || 0) > 0;
+    const payload: any = {
+        clickFun: false,
+        desc: token.description,
+        funGroup: false,
+        imgUrl: imageUrl,
+        label: 'Meme',
+        launchTime: Date.now(),
+        lpTradingFee: 0.0025,
+        name: token.name,
+        preSale: 0,
+        raisedAmount: 24,
+        raisedToken: {
+            b0Amount: '8',
+            buyFee: isTaxToken ? ((tax.taxRateBps || 0) / 10000).toString() : '0.01',
+            nativeSymbol: 'BNB',
+            networkCode: 'BSC',
+            platform: 'MEME',
+            saleRate: '0.8',
+            sellFee: isTaxToken ? ((tax.taxRateBps || 0) / 10000).toString() : '0.01',
+            status: 'PUBLISH',
+            symbol: 'BNB',
+            symbolAddress: '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c',
+            totalAmount: '1000000000',
+            totalBAmount: '24',
+            ...(isTaxToken ? { template: 5 } : {}),
+        },
+        reserveRate: 0,
+        saleRate: 0.8,
+        shortName: token.symbol,
+        symbol: 'BNB',
+        totalSupply: 1000000000,
+        twitterUrl: token.twitter || '',
+        webUrl: token.website || '',
+        telegramUrl: token.telegram || '',
+    };
+
+    if (isTaxToken) {
+        const totalBps = (tax.fundsBps || 0) + (tax.burnBps || 0) + (tax.holdersBps || 0) + (tax.liquidityBps || 0);
+        if (totalBps !== 10000) {
+            throw new Error(`Tax distribution must sum to 100% (10000 bps). Current sum: ${totalBps}`);
+        }
+        if ((tax.fundsBps || 0) > 0 && !tax.beneficiaryAddress) {
+            throw new Error('Beneficiary address required when Funds % > 0.');
+        }
+        Object.assign(payload, {
+            tokenTaxInfo: {
+                burnRate: (tax.burnBps || 0) / 100,
+                divideRate: (tax.holdersBps || 0) / 100,
+                feeRate: (tax.taxRateBps || 0) / 100,
+                liquidityRate: (tax.liquidityBps || 0) / 100,
+                recipientAddress: (tax.fundsBps || 0) > 0 ? (tax.beneficiaryAddress || '') : '',
+                recipientRate: (tax.fundsBps || 0) / 100,
+                minSharing: 1000000,
+            },
+        });
+    }
+
+    return payload;
 };
 
 const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClose, t, aiConfig }) => {
     const [activeTab, setActiveTab] = useState<'DOCS' | 'BUILDER'>('DOCS');
     const { data: walletClient } = useConnectorClient();
-    const { isConnected } = useAccount();
+    const { isConnected, address } = useAccount();
     const publicClient = usePublicClient();
     const chainId = useChainId();
     const buildLogsKey = `fourcraft_builder_logs_${idea.id}`;
@@ -327,6 +507,18 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
         symbol: storedBuilder?.tokenForm?.symbol || '',
         supply: storedBuilder?.tokenForm?.supply || '1000000000',
         description: storedBuilder?.tokenForm?.description || '',
+        twitter: storedBuilder?.tokenForm?.twitter || 'https://x.com/',
+        telegram: storedBuilder?.tokenForm?.telegram || 'https://t.me/',
+        website: storedBuilder?.tokenForm?.website || 'https://www.com',
+        customLogoData: storedBuilder?.tokenForm?.customLogoData || '',
+        useCustomLogo: storedBuilder?.tokenForm?.useCustomLogo ?? false,
+        dryRun: storedBuilder?.tokenForm?.dryRun ?? true,
+        taxRatePercent: storedBuilder?.tokenForm?.taxRatePercent ?? 3,
+        fundsPercent: storedBuilder?.tokenForm?.fundsPercent ?? 100,
+        burnPercent: storedBuilder?.tokenForm?.burnPercent ?? 0,
+        holdersPercent: storedBuilder?.tokenForm?.holdersPercent ?? 0,
+        liquidityPercent: storedBuilder?.tokenForm?.liquidityPercent ?? 0,
+        beneficiaryAddress: storedBuilder?.tokenForm?.beneficiaryAddress || '',
     });
     const [buildLogs, setBuildLogs] = useState<string[]>(() => {
         if (typeof window === 'undefined') return [];
@@ -341,6 +533,7 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
     });
     const [isContractDeploying, setIsContractDeploying] = useState(false);
     const [isMinting, setIsMinting] = useState(false);
+    const [txHash, setTxHash] = useState<string | null>(null);
     const blueprintMarkdown = useMemo(() => blueprint ? blueprintToMarkdown(idea, blueprint) : '', [blueprint, idea]);
     const previewTitle = buildStep === 2 ? t.frontend_prompt : buildStep === 3 ? t.deploy_title : t.gen_assets;
     const previewCopyPayload = buildStep === 1 ? contractCode : buildStep === 2 ? frontendPrompt : '';
@@ -351,7 +544,11 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
         { label: t.open_v0, url: 'https://v0.dev/' },
     ];
 
-    const addToLog = (msg: string) => setBuildLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+    const addToLog = (msg: string) => {
+        const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        console.log(line);
+        setBuildLogs(prev => [...prev, line]);
+    };
 
     useEffect(() => {
         const stored = getStoredBuilderState();
@@ -367,6 +564,18 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                 symbol: stored?.tokenForm?.symbol || '',
                 supply: stored?.tokenForm?.supply || '1000000000',
                 description: stored?.tokenForm?.description || '',
+                twitter: stored?.tokenForm?.twitter || 'https://x.com/',
+                telegram: stored?.tokenForm?.telegram || 'https://t.me/',
+                website: stored?.tokenForm?.website || 'https://www.com',
+                customLogoData: stored?.tokenForm?.customLogoData || '',
+                useCustomLogo: stored?.tokenForm?.useCustomLogo ?? false,
+                dryRun: stored?.tokenForm?.dryRun ?? true,
+                taxRatePercent: stored?.tokenForm?.taxRatePercent ?? 3,
+                fundsPercent: stored?.tokenForm?.fundsPercent ?? 100,
+                burnPercent: stored?.tokenForm?.burnPercent ?? 0,
+                holdersPercent: stored?.tokenForm?.holdersPercent ?? 0,
+                liquidityPercent: stored?.tokenForm?.liquidityPercent ?? 0,
+                beneficiaryAddress: stored?.tokenForm?.beneficiaryAddress || '',
             });
         } else {
             setBuildStep(0);
@@ -380,6 +589,18 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                 symbol: '',
                 supply: '1000000000',
                 description: '',
+                twitter: 'https://x.com/',
+                telegram: 'https://t.me/',
+                website: 'https://www.com',
+                customLogoData: '',
+                useCustomLogo: false,
+                dryRun: true,
+                taxRatePercent: 3,
+                fundsPercent: 100,
+                burnPercent: 0,
+                holdersPercent: 0,
+                liquidityPercent: 0,
+                beneficiaryAddress: '',
             });
         }
 
@@ -571,18 +792,231 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
             symbol: prev.symbol || idea.title.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'FOUR',
             supply: prev.supply || '1000000000',
             description: prev.description || idea.tagline || idea.description.slice(0, 120),
+            twitter: prev.twitter || 'https://x.com/',
+            telegram: prev.telegram || 'https://t.me/',
+            website: prev.website || 'https://www.com',
+            customLogoData: prev.customLogoData || '',
+            useCustomLogo: prev.useCustomLogo ?? false,
+            dryRun: prev.dryRun ?? true,
+            taxRatePercent: prev.taxRatePercent ?? 3,
+            fundsPercent: prev.fundsPercent ?? 100,
+            burnPercent: prev.burnPercent ?? 0,
+            holdersPercent: prev.holdersPercent ?? 0,
+            liquidityPercent: prev.liquidityPercent ?? 0,
+            beneficiaryAddress: prev.beneficiaryAddress || address || '',
         }));
-    }, [buildStep, idea, logos.length]);
+    }, [address, buildStep, idea, logos.length]);
 
     const handleMintChaos = () => {
         if (isMinting) return;
+        console.log('[MINT] start');
         setIsMinting(true);
-        addToLog("Submitting token metadata to four.meme...");
-        setTimeout(() => {
-            addToLog("Token minted. Chaos released.");
-            setIsMinting(false);
-        }, 2000);
+        const launch = async () => {
+            try {
+                console.log('[MINT] validating wallet');
+                if (!isConnected || !address) {
+                    addToLog('Wallet not connected. Please connect to launch.');
+                    return;
+                }
+                let activeWalletClient = walletClient;
+                if (!activeWalletClient && typeof window !== 'undefined' && (window as any).ethereum) {
+                    activeWalletClient = createWalletClient({
+                        chain: bsc,
+                        transport: custom((window as any).ethereum),
+                        account: address,
+                    });
+                }
+                if (!activeWalletClient || !publicClient) {
+                    addToLog('Wallet client unavailable. Please reconnect.');
+                    return;
+                }
+                if (chainId !== bsc.id) {
+                    addToLog('Wrong network. Please switch to BSC.');
+                    return;
+                }
+
+                addToLog('Authorizing wallet...');
+                await ensureWalletAuthorized(activeWalletClient);
+
+                const imageData = tokenForm.useCustomLogo ? tokenForm.customLogoData : logos[selectedLogo] || '';
+                const rawBlob = dataUrlToBlob(imageData);
+                if (!rawBlob) {
+                    addToLog('Invalid logo data.');
+                    return;
+                }
+                const imageBlob = rawBlob.type === 'image/svg+xml'
+                    ? await svgToPngBlob(rawBlob, 512)
+                    : rawBlob;
+
+                const trimmedName = tokenForm.name.trim();
+                if (!trimmedName || trimmedName.length > 20) {
+                    addToLog('Token name is required and must be 1-20 characters.');
+                    return;
+                }
+                const trimmedSymbol = tokenForm.symbol.trim();
+                if (!trimmedSymbol || trimmedSymbol.length > 10) {
+                    addToLog('Token symbol is required and must be 1-10 characters.');
+                    return;
+                }
+
+                const taxRateBps = Math.round((Number(tokenForm.taxRatePercent) || 0) * 100);
+                const fundsBps = Math.round((Number(tokenForm.fundsPercent) || 0) * 100);
+                const burnBps = Math.round((Number(tokenForm.burnPercent) || 0) * 100);
+                const holdersBps = Math.round((Number(tokenForm.holdersPercent) || 0) * 100);
+                const liquidityBps = Math.round((Number(tokenForm.liquidityPercent) || 0) * 100);
+
+                addToLog('Requesting login nonce...');
+                console.log('[MINT] nonce request payload', {
+                    accountAddress: address,
+                    networkCode: 'BSC',
+                    verifyType: 'LOGIN',
+                });
+                const nonceRes = await fetch(`${FOUR_MEME_API}/private/user/nonce/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        accountAddress: address,
+                        networkCode: 'BSC',
+                        verifyType: 'LOGIN',
+                    }),
+                });
+                if (!nonceRes.ok) {
+                    const text = await nonceRes.text();
+                    throw new Error(`Nonce request failed: ${text || nonceRes.status}`);
+                }
+                const noncePayload = await nonceRes.json();
+                console.log('[MINT] nonce response', noncePayload);
+                const nonce = noncePayload?.data;
+                if (!nonce) throw new Error('Nonce generation failed.');
+
+                const message = `You are sign in Meme ${nonce}`;
+                addToLog('Signing login message...');
+                console.log('[MINT] sign message', message);
+                const signature = await signMessageCompat(activeWalletClient, message, address);
+                console.log('[MINT] signature', signature);
+
+                addToLog('Logging into four.meme...');
+                const loginRes = await fetch(`${FOUR_MEME_API}/private/user/login/dex`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        inviteCode: '',
+                        langType: 'EN',
+                        region: 'WEB',
+                        verifyInfo: {
+                            address,
+                            networkCode: 'BSC',
+                            signature,
+                            verifyType: 'LOGIN',
+                        },
+                        walletName: 'MetaMask',
+                    }),
+                });
+                if (!loginRes.ok) {
+                    const text = await loginRes.text();
+                    throw new Error(`Login failed: ${text || loginRes.status}`);
+                }
+                const loginPayload = await loginRes.json();
+                console.log('[MINT] login response', loginPayload);
+                const accessToken = loginPayload?.data;
+                if (!accessToken) throw new Error('Login failed.');
+
+                addToLog('Uploading logo...');
+                const formData = new FormData();
+                const filename = imageBlob.type === 'image/png' ? 'logo.png' : 'logo.jpg';
+                formData.append('file', imageBlob, filename);
+                const uploadRes = await fetch(`${FOUR_MEME_API}/private/token/upload`, {
+                    method: 'POST',
+                    headers: { 'Meme-Web-Access': accessToken },
+                    body: formData,
+                });
+                if (!uploadRes.ok) {
+                    const text = await uploadRes.text();
+                    throw new Error(`Image upload failed: ${text || uploadRes.status}`);
+                }
+                const uploadPayload = await uploadRes.json();
+                console.log('[MINT] upload response', uploadPayload);
+                const imageUrl = uploadPayload?.data;
+                if (!imageUrl) throw new Error('Image upload failed.');
+
+                const taxPayload = taxRateBps > 0 ? {
+                    taxRateBps,
+                    fundsBps,
+                    burnBps,
+                    holdersBps,
+                    liquidityBps,
+                    beneficiaryAddress: tokenForm.beneficiaryAddress,
+                } : null;
+
+                const metadataPayload = buildMetadataPayload({
+                    name: trimmedName,
+                    symbol: trimmedSymbol,
+                    description: tokenForm.description,
+                    twitter: tokenForm.twitter,
+                    telegram: tokenForm.telegram,
+                    website: tokenForm.website,
+                }, imageUrl, taxPayload);
+
+                addToLog('Submitting token metadata...');
+                console.log('[MINT] metadata payload', metadataPayload);
+                const createRes = await fetch(`${FOUR_MEME_API}/private/token/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Meme-Web-Access': accessToken,
+                    },
+                    body: JSON.stringify(metadataPayload),
+                });
+                if (!createRes.ok) {
+                    const text = await createRes.text();
+                    throw new Error(`Create token failed: ${text || createRes.status}`);
+                }
+                const createPayload = await createRes.json();
+                console.log('[MINT] create response', createPayload);
+                if (createPayload?.code !== 200 && createPayload?.code !== 0) {
+                    throw new Error(`API Error: ${JSON.stringify(createPayload)}`);
+                }
+                const { createArg, signature: contractSignature } = createPayload.data || {};
+                if (!createArg || !contractSignature) throw new Error('Missing contract signature.');
+
+                if (tokenForm.dryRun) {
+                    addToLog('DRY RUN enabled. Skipping on-chain transaction.');
+                    addToLog(`createArg: ${createArg}`);
+                    addToLog(`signature: ${contractSignature}`);
+                    console.log('[MINT] dry run complete');
+                    return;
+                }
+
+                addToLog('Submitting on-chain transaction...');
+                console.log('[MINT] writeContract args', { createArg, contractSignature });
+                const hash = await writeContractCompat(activeWalletClient, address, {
+                    address: FOUR_MEME_FACTORY,
+                    abi: FOUR_MEME_FACTORY_ABI,
+                    functionName: 'createToken',
+                    args: [createArg, contractSignature],
+                });
+                addToLog(`Tx sent: ${hash}`);
+                setTxHash(hash);
+                console.log('[MINT] tx hash', hash);
+                const receipt = await publicClient.waitForTransactionReceipt({ hash });
+                console.log('[MINT] receipt', receipt);
+                const tokenAddress = receipt.logs?.find(log => log.address && log.address.toLowerCase() !== FOUR_MEME_FACTORY.toLowerCase())?.address
+                    || receipt.logs?.[0]?.address;
+                if (tokenAddress) {
+                    addToLog(`Token deployed at ${tokenAddress}`);
+                }
+                addToLog('Token minted. Chaos released.');
+            } catch (error: any) {
+                console.error('[MINT] error', error);
+                addToLog(`Launch failed: ${error?.message || 'Unknown error'}`);
+            } finally {
+                console.log('[MINT] end');
+                setIsMinting(false);
+            }
+        };
+        launch();
     };
+
 
     const handleResetCache = () => {
         if (typeof window !== 'undefined') {
@@ -595,15 +1029,41 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
         setContractAddress(null);
         setLogos([]);
         setSelectedLogo(0);
-        setTokenForm({
-            name: '',
-            symbol: '',
-            supply: '1000000000',
-            description: '',
-        });
+            setTokenForm({
+                name: '',
+                symbol: '',
+                supply: '1000000000',
+                description: '',
+                twitter: '',
+                telegram: '',
+                website: '',
+                customLogoData: '',
+                useCustomLogo: false,
+                dryRun: true,
+                taxRatePercent: 3,
+                fundsPercent: 100,
+                burnPercent: 0,
+                holdersPercent: 0,
+                liquidityPercent: 0,
+                beneficiaryAddress: address || '',
+            });
         setBuildLogs([]);
         setIsContractDeploying(false);
         setIsMinting(false);
+        setTxHash(null);
+    };
+
+    const handleCustomLogoUpload = (file: File | null) => {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = typeof reader.result === 'string' ? reader.result : '';
+            if (result) {
+                setTokenForm(prev => ({ ...prev, customLogoData: result }));
+                addToLog('Custom logo loaded.');
+            }
+        };
+        reader.readAsDataURL(file);
     };
 
     const downloadFile = (filename: string, data: Blob | string, mime: string) => {
@@ -627,6 +1087,8 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
         const blob = await createPdfBlob(blueprintMarkdown || '');
         downloadFile(`${safeName}.pdf`, blob, 'application/pdf');
     };
+
+    const bscscanUrl = txHash ? `https://bscscan.com/tx/${txHash}` : '';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
@@ -844,6 +1306,30 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                                                             className="mt-1 w-full h-20 bg-black/40 border border-white/10 rounded px-3 py-2 text-gray-200 resize-none"
                                                         />
                                                     </label>
+                                                    <label className="block">
+                                                        <span className="text-gray-500">{t.token_twitter}</span>
+                                                        <input
+                                                            value={tokenForm.twitter}
+                                                            onChange={(e) => setTokenForm(prev => ({ ...prev, twitter: e.target.value }))}
+                                                            className="mt-1 w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-gray-200"
+                                                        />
+                                                    </label>
+                                                    <label className="block">
+                                                        <span className="text-gray-500">{t.token_telegram}</span>
+                                                        <input
+                                                            value={tokenForm.telegram}
+                                                            onChange={(e) => setTokenForm(prev => ({ ...prev, telegram: e.target.value }))}
+                                                            className="mt-1 w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-gray-200"
+                                                        />
+                                                    </label>
+                                                    <label className="block">
+                                                        <span className="text-gray-500">{t.token_website}</span>
+                                                        <input
+                                                            value={tokenForm.website}
+                                                            onChange={(e) => setTokenForm(prev => ({ ...prev, website: e.target.value }))}
+                                                            className="mt-1 w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-gray-200"
+                                                        />
+                                                    </label>
                                                 </div>
 
                                                 <div className="space-y-2">
@@ -859,6 +1345,108 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                                                             </button>
                                                         ))}
                                                     </div>
+                                                    <div className="text-[10px] text-gray-500">{t.logo_upload}</div>
+                                                    <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-gray-300 hover:border-white/30 transition">
+                                                        <span className="font-mono">{t.logo_upload_action}</span>
+                                                        <span className="text-[10px] text-gray-500">{t.logo_upload_hint}</span>
+                                                        <input
+                                                            type="file"
+                                                            accept="image/*"
+                                                            onChange={(e) => handleCustomLogoUpload(e.target.files?.[0] || null)}
+                                                            className="hidden"
+                                                        />
+                                                    </label>
+                                                    {tokenForm.customLogoData && (
+                                                        <label className="flex items-center gap-2 text-[10px] text-gray-400">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={Boolean(tokenForm.useCustomLogo)}
+                                                                onChange={(e) => setTokenForm(prev => ({ ...prev, useCustomLogo: e.target.checked }))}
+                                                            />
+                                                            <span className={tokenForm.useCustomLogo ? 'text-[#FFB800]' : 'text-gray-500'}>
+                                                                {t.logo_upload_active}
+                                                            </span>
+                                                        </label>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <div className="text-gray-500">{t.tax_section}</div>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <label className="block">
+                                                            <span className="text-gray-500">{t.tax_rate}</span>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={tokenForm.taxRatePercent}
+                                                                onChange={(e) => setTokenForm(prev => ({ ...prev, taxRatePercent: Number(e.target.value) }))}
+                                                                className="mt-1 w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-gray-200"
+                                                            />
+                                                        </label>
+                                                        <label className="block">
+                                                            <span className="text-gray-500">{t.tax_funds}</span>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={tokenForm.fundsPercent}
+                                                                onChange={(e) => setTokenForm(prev => ({ ...prev, fundsPercent: Number(e.target.value) }))}
+                                                                className="mt-1 w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-gray-200"
+                                                            />
+                                                        </label>
+                                                        <label className="block">
+                                                            <span className="text-gray-500">{t.tax_burn}</span>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={tokenForm.burnPercent}
+                                                                onChange={(e) => setTokenForm(prev => ({ ...prev, burnPercent: Number(e.target.value) }))}
+                                                                className="mt-1 w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-gray-200"
+                                                            />
+                                                        </label>
+                                                        <label className="block">
+                                                            <span className="text-gray-500">{t.tax_holders}</span>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={tokenForm.holdersPercent}
+                                                                onChange={(e) => setTokenForm(prev => ({ ...prev, holdersPercent: Number(e.target.value) }))}
+                                                                className="mt-1 w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-gray-200"
+                                                            />
+                                                        </label>
+                                                        <label className="block">
+                                                            <span className="text-gray-500">{t.tax_liquidity}</span>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={tokenForm.liquidityPercent}
+                                                                onChange={(e) => setTokenForm(prev => ({ ...prev, liquidityPercent: Number(e.target.value) }))}
+                                                                className="mt-1 w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-gray-200"
+                                                            />
+                                                        </label>
+                                                        <label className="block col-span-2">
+                                                            <span className="text-gray-500">{t.tax_beneficiary}</span>
+                                                            <input
+                                                                value={tokenForm.beneficiaryAddress}
+                                                                onChange={(e) => setTokenForm(prev => ({ ...prev, beneficiaryAddress: e.target.value }))}
+                                                                className="mt-1 w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-gray-200"
+                                                            />
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <div className="text-gray-500">{t.launch_config}</div>
+                                                    <label className="flex items-center gap-2 text-gray-400">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={Boolean(tokenForm.dryRun)}
+                                                            onChange={(e) => setTokenForm(prev => ({ ...prev, dryRun: e.target.checked }))}
+                                                        />
+                                                        <span className="text-gray-500">{t.launch_dryrun}</span>
+                                                    </label>
                                                 </div>
                                             </div>
                                         )}
@@ -950,6 +1538,29 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                     )}
                 </div>
             </div>
+
+            {txHash && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                    <div className="bg-[#0A0A0A] border border-white/10 rounded-xl p-6 w-full max-w-md shadow-[0_0_40px_rgba(255,184,0,0.2)]">
+                        <h3 className="text-lg font-bold text-white mb-2">{t.tx_title}</h3>
+                        <p className="text-xs text-gray-400 font-mono break-all mb-4">{txHash}</p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setTxHash(null)}
+                                className="flex-1 py-2 bg-white/5 text-gray-300 font-mono rounded border border-white/10 hover:border-white/40"
+                            >
+                                {t.tx_close}
+                            </button>
+                            <button
+                                onClick={() => window.open(bscscanUrl, '_blank', 'noopener,noreferrer')}
+                                className="flex-1 py-2 bg-[#FFB800] text-black font-bold font-mono rounded hover:bg-[#E69A00] transition"
+                            >
+                                {t.tx_view}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

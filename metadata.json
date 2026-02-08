@@ -1,5 +1,9 @@
 {
   "name": "4craft",
   "description": "An AI-powered Dapp for rapidly crafting ideas, vibe-coding the build, and launching tokens via four.meme.",
+  "logo": "/logo.png",
+  "favorcoin": {
+    "icon": "/logo.png"
+  },
   "requestFramePermissions": []
 }
