@@ -42,7 +42,7 @@ const App: React.FC = () => {
   const [config, setConfig] = useState<ForgeConfig>({
     mode: 'TARGETED',
     ecosystems: ['BSC'],
-    sectors: ['FOUR.MEME'],
+    sectors: ['FLAP.SH'],
     quantity: 3,
     degenLevel: 20
   });
@@ -326,7 +326,7 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-[#FCEE09]/10 p-1.5 rounded border border-[#FCEE09]/30">
-              <img src="/logo.png" alt="4craft logo" className="w-5 h-5 object-contain" />
+              <img src="/logo.png" alt="FlapCraft logo" className="w-5 h-5 object-contain" />
             </div>
             <span className="font-bold tracking-wider text-white">{t.navbar.title}</span>
             <span className="text-[10px] font-mono text-gray-500 border border-white/10 px-1 rounded">{t.navbar.subtitle}</span>
@@ -511,7 +511,7 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 py-3 flex justify-center gap-6 text-xs font-mono text-gray-400">
           <a
             className="rounded-full bg-white/5 p-2 text-[#FCEE09] transition hover:bg-white/10"
-            href="https://github.com/carzygod"
+            href="https://github.com/"
             target="_blank"
             rel="noreferrer"
             aria-label="GitHub"
@@ -531,7 +531,7 @@ const App: React.FC = () => {
           </a>
           <a
             className="rounded-full bg-white/5 p-2 text-[#FCEE09] transition hover:bg-white/10"
-            href="https://x.com/carzygod"
+            href="https://x.com/flapcraft"
             target="_blank"
             rel="noreferrer"
             aria-label="X"

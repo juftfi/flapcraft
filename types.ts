@@ -1,5 +1,5 @@
 export type Ecosystem = 'BSC';
-export type Sector = 'FOUR.MEME' | 'DeFi' | 'SocialFi' | 'GameFi' | 'Infra' | 'DePin' | 'NFT' | 'DAO';
+export type Sector = 'FLAP.SH' | 'DeFi' | 'SocialFi' | 'GameFi' | 'Infra' | 'DePin' | 'NFT' | 'DAO';
 export type Language = 'en' | 'zh-CN' | 'zh-TW' | 'ru';
 
 export interface ForgeConfig {

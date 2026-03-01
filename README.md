@@ -1,11 +1,11 @@
-# 4craft
+# FlapCraft
 
 An AI-powered Dapp that helps users craft ideas fast, build with vibe coding tools, and launch tokens via four.meme.
 
-![Banner](./public/4craft-banner.svg)
+![Banner](./public/FlapCraft-banner.svg)
 
 **Updated Summary**
-4craft streamlines the full flow: generate an idea, synthesize a contract, produce a frontend build prompt for vibe coding IDEs, and prepare a token launch on four.meme.
+FlapCraft streamlines the full flow: generate an idea, synthesize a contract, produce a frontend build prompt for vibe coding IDEs, and prepare a token launch on four.meme.
 
 ## Core Flow
 The application operates on a three-stage pipeline: **Forge (Ideation)** -> **Oracle (Verification)** -> **Architect (Blueprinting)**.
@@ -17,7 +17,7 @@ Users configure the Forge to generate project ideas:
   - **Chaos**: randomized, high-variance ideas.
 - **Parameters**:
   - **Ecosystem**: BSC only.
-  - **Sectors**: FOUR.MEME, DeFi, SocialFi, GameFi, Infra, DePin, NFT, DAO.
+  - **Sectors**: FLAP.SH, DeFi, SocialFi, GameFi, Infra, DePin, NFT, DAO.
   - **Degen Level (0-100)**: tunes risk/innovation.
   - **AI Model**: ChatGPT-compatible model with structured JSON outputs.
 

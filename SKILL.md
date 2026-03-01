@@ -1,11 +1,11 @@
 ---
-name: 4craft
+name: FlapCraft
 version: 1.0.0
 description: Chaos-to-launch workflow for AI agent tokens on BSC with Four.Meme + 4claw handoff.
-homepage: https://4craft.fun
+homepage: https://FlapCraft.fun
 ---
 
-# 4craft Skill
+# FlapCraft Skill
 
 This skill encapsulates the **Chaos mode** workflow and turns it into a guided agent protocol that ends in a token launch via **4claw** (Four.Meme on BSC).
 
@@ -17,7 +17,7 @@ This skill encapsulates the **Chaos mode** workflow and turns it into a guided a
 
 ## Workflow (Agent Steps)
 1. **Chaos Ideation**
-   - Generate one project idea aligned with user constraints (BSC + FOUR.MEME context).
+   - Generate one project idea aligned with user constraints (BSC + FLAP.SH context).
    - Provide a concise one-paragraph pitch + key features.
 
 2. **Contract Delivery**

@@ -13,7 +13,7 @@ import {
 } from '@rainbow-me/rainbowkit/wallets';
 
 const config = getDefaultConfig({
-  appName: '4craft',
+  appName: 'FlapCraft',
   projectId: 'YOUR_PROJECT_ID', // Get one at https://cloud.reown.com
   chains: [bsc],
   wallets: [

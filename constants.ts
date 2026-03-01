@@ -1,7 +1,7 @@
 import { Ecosystem, Sector } from './types';
 
 export const ECOSYSTEMS: Ecosystem[] = ['BSC'];
-export const SECTORS: Sector[] = ['FOUR.MEME', 'DeFi', 'SocialFi', 'GameFi', 'Infra', 'DePin', 'NFT', 'DAO'];
+export const SECTORS: Sector[] = ['FLAP.SH', 'DeFi', 'SocialFi', 'GameFi', 'Infra', 'DePin', 'NFT', 'DAO'];
 
 export const DEGEN_LABELS = {
   0: 'Institutional (Safe)',
