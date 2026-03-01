@@ -124,7 +124,7 @@ const baseTranslations = {
     cancel: 'CANCEL',
   },
   terminal: {
-    process: 'AGENT_THOUGHT_PROCESS // 4CRAFT_CORE',
+    process: 'AGENT_THOUGHT_PROCESS // FLAPCRAFT_CORE',
     thinking: '_PROCESSING_NEURAL_PATHWAYS...',
   },
   app: {
