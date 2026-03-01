@@ -895,7 +895,7 @@ const BlueprintModal: React.FC<BlueprintModalProps> = ({ idea, blueprint, onClos
                 const signature = await signMessageCompat(activeWalletClient, message, address);
                 console.log('[MINT] signature', signature);
 
-                addToLog('Logging into four.meme...');
+                addToLog('Logging into flap.sh...');
                 const loginRes = await fetch(`${FOUR_MEME_API}/private/user/login/dex`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

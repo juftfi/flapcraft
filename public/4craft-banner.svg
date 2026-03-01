@@ -21,6 +21,6 @@
     <line x1="60" y1="200" x2="1140" y2="200" />
   </g>
   <text x="80" y="150" font-family="Arial Black, Arial, sans-serif" font-size="72" fill="url(#neon)">FlapCraft</text>
-  <text x="80" y="210" font-family="Arial, sans-serif" font-size="24" fill="#E5E7EB">Vibe coding launchpad for four.meme token drops</text>
+  <text x="80" y="210" font-family="Arial, sans-serif" font-size="24" fill="#E5E7EB">Vibe coding launchpad for flap.sh token drops</text>
   <text x="80" y="260" font-family="Consolas, monospace" font-size="18" fill="#9CA3AF">Idea -> Vibe Build -> Launch</text>
 </svg>

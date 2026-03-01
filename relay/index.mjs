@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 
-const TARGET = 'https://four.meme/meme-api/v1';
+const TARGET = 'https://flap.sh/meme-api/v1';
 
 const loadEnvFile = () => {
   const envPath = '.env';
@@ -105,5 +105,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`four.meme relay listening on :${PORT}`);
+  console.log(`flap.sh relay listening on :${PORT}`);
 });

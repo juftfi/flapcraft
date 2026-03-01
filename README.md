@@ -1,11 +1,9 @@
 # FlapCraft
 
-An AI-powered Dapp that helps users craft ideas fast, build with vibe coding tools, and launch tokens via four.meme.
-
-![Banner](./public/FlapCraft-banner.svg)
+An AI-powered Dapp that helps users craft ideas fast, build with vibe coding tools, and launch tokens via flap.sh.
 
 **Updated Summary**
-FlapCraft streamlines the full flow: generate an idea, synthesize a contract, produce a frontend build prompt for vibe coding IDEs, and prepare a token launch on four.meme.
+FlapCraft streamlines the full flow: generate an idea, synthesize a contract, produce a frontend build prompt for vibe coding IDEs, and prepare a token launch on flap.sh.
 
 ## Core Flow
 The application operates on a three-stage pipeline: **Forge (Ideation)** -> **Oracle (Verification)** -> **Architect (Blueprinting)**.
@@ -30,7 +28,7 @@ Verify idea uniqueness:
 Blueprinting now includes a guided builder:
 - **Contract Stage**: generates a full Solidity contract and provides a **Contract Deploy** action.
 - **Frontend Stage**: generates a full Dapp build prompt for vibe coding IDEs (Claude Code, Codex, Antigravity, v0.app).
-- **Deploy Stage**: auto-generates 4 logo options and pre-fills a four.meme token launch form (editable by users).
+- **Deploy Stage**: auto-generates 4 logo options and pre-fills a flap.sh token launch form (editable by users).
 
 ## Tech Stack
 - **Frontend**: React 19 + Vite
