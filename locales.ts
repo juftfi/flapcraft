@@ -16,7 +16,7 @@ export const PROMPT_LANG_MAP: Record<Language, string> = {
 
 const baseTranslations = {
   navbar: {
-    title: '4CRAFT',
+    title: 'FLAPCRAFT',
     subtitle: 'v0.1.0',
     status: 'SYSTEM_ONLINE',
   },
@@ -135,7 +135,7 @@ const baseTranslations = {
     view_grid: 'GRID',
     view_carousel: '3D DECK',
     logs: {
-      init: 'Initializing 4CRAFT protocol...',
+      init: 'Initializing FLAPCRAFT protocol...',
       scan: 'Scanning {n} ecosystems for arbitrage opportunities...',
       analyze: 'Analyzing {sectors} saturation levels...',
       synth: 'Idea #{n} synthesized successfully.',
