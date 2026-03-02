@@ -531,7 +531,7 @@ const App: React.FC = () => {
           </a>
           <a
             className="rounded-full bg-white/5 p-2 text-[#FCEE09] transition hover:bg-white/10"
-            href="https://x.com/flapcraft"
+            href="https://x.com/flap_craft"
             target="_blank"
             rel="noreferrer"
             aria-label="X"
